@@ -9,12 +9,16 @@
 #include <unistd.h>
 #include <sys/resource.h>
 #include <argp.h>
+#include <assert.h>
 
 #include "bpf/libbpf.h"
 #include "bpf/bpf.h"
 
 #include "main.bpf.skel.h"
 #include "main.h"
+
+/* Maximum amount of records to consume at once from the BPF ring buffer */
+#define MAX_EVENTS	4
 
 const char argp_program_doc[] =
 	"A simple eBPF CO-RE program to test libbpf maps\n";
@@ -111,7 +115,7 @@ int main(int argc, char **argv)
 	signal(SIGTERM, sig_handler);
 
 	while (!exiting) {
-		err = ring_buffer__poll(rb, 1000);
+		err = ring_buffer__consume_n(rb, MAX_EVENTS);
 		if (err == -EINTR) {
 			err = 0;
 			break;
@@ -120,6 +124,10 @@ int main(int argc, char **argv)
 			fprintf(stderr,
 				"failed polling from ring buffer: %d\n", err);
 			break;
+		}
+		if (err > 0) {
+			fprintf(stdout, "consumed %d records\n", err);
+			assert(err <= MAX_EVENTS);
 		}
 	}
 
